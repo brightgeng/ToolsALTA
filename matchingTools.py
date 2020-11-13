@@ -5,19 +5,19 @@ Created on Sep 14 2019  @author: Bright Geng
 """
 import base64
 import os
+import pickle
 import tkinter as tk
 import tkinter.messagebox
-from tkinter import ttk
-import pinyin
-from icon import img
-from matching import Farm
-from matching import DIR, YMD, DOUT, DB
-from log import logging, logger
-from creatDB import loaddb, writedb
-import pickle
 import traceback
+from tkinter import ttk
 
-from tools import merge_body, extract_log, mger_pos, merge_files
+import pinyin
+
+from creatDB import loaddb, writedb
+from icon import img
+from log import logger, logging
+from matching import DB, YMD, Farm
+from tools import extract_log, merge_body, merge_files, mger_pos
 
 version = '2.3-20200805'
 CHANGLOG = """

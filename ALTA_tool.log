@@ -300,3 +300,6 @@ Traceback (most recent call last):
     raise KeyError(f"{not_found} not in index")
 KeyError: "['繁育状态'] not in index"
 
+2020-11-13 16:57:11,810-matchingTools.py-<module>-INFO-1588-程序启动成功!
+2020-11-13 16:57:12,143-matchingTools.py-<module>-INFO-1589-版本：2.3-20200805
+2020-11-13 16:57:22,425-matchingTools.py-quite-INFO-1552-程序退出：

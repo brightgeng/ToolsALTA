@@ -1,7 +1,6 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler as trf
 
-
 # 创建log
 f = ('%(asctime)s-%(filename)s-%(funcName)s'
      '-%(levelname)s-%(lineno)d-%(message)s')

@@ -1,23 +1,23 @@
-from log import logger
-from error import MyException
+import calendar
 import datetime
+import math
 import os
+import pickle
+import platform
 import sys
 import time
 import traceback
-import pickle
-import calendar
-import math
-import platform
 from fractions import Fraction
+from random import normalvariate, randint, random
 from shutil import copyfile
+
 import numpy as np
 import pandas as pd
 import pinyin
 import xlwings as xw
-from random import random
-from random import normalvariate
-from random import randint
+
+from error import MyException
+from log import logger
 
 DATE0 = datetime.datetime(1970, 1, 1)
 DIR = r"c:\Users\runda\OneDrive - RundaTech\04 工作\0405 艾格威贸易\ALTA_Matching"
