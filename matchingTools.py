@@ -8,20 +8,24 @@ import os
 import tkinter as tk
 import tkinter.messagebox
 from tkinter import ttk
-
 import pinyin
-
 from icon import img
-from matching import *
-from log import logger
+from matching import Farm
+from matching import DIR, YMD, DOUT, DB
+from log import logging, logger
+from creatDB import loaddb, writedb
+import pickle
+import traceback
+
+from tools import merge_body, extract_log, mger_pos, merge_files
 
 version = '2.3-20200805'
 CHANGLOG = """
 version    Date     comments                        todo
-2.3        8/5/20   流产率设置分为了青年和成母牛     
+2.3        8/5/20   流产率设置分为了青年和成母牛
 2.2        7/1/20   修改推算怀孕率的bug
 2.1        4/13/20  预测的第2方法                   第3方法(机器学习)
-2.0        4/03/20  存栏预测功能                
+2.0        4/03/20  存栏预测功能
 1.0        3/20/20  主体已完成                      存栏预测模块更新细节
 
 """
@@ -66,12 +70,13 @@ class LogtoUi(object):
 # GUI界面
 class APP(object):
     def __init__(self, master):
+        self.fe_5_6 = tk.Frame(master)
         self.menu_bar_(master)
         self.forecast_SubWin4(master)  # 存栏预测
         self.merge_body_SubWin1(master)  # 工具1
         self.extract_log_SubWin2(master)  # 工具2
         self.merge_pos_SubWin3(master)  # 工具3
-        self.forecast_SubWin4(master)  # 工具4预测存栏预测
+        self.merge_files_SubWin4(master)  # 工具4 合并选配文件
         self.demand_SubWin5(master)  # 维护牧场需求
         self.semen_SubWin6(master)  # 维护冻精关系
         self.mast_window(master)  # 主窗口
@@ -89,9 +94,8 @@ class APP(object):
         # 工具
         toolmenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='工具', menu=toolmenu)
-        toolmenu.add_command(
-            label='1_备用')
-        toolmenu.add_separator()    # 添加一条分隔线
+        toolmenu.add_command(label='1_备用')
+        toolmenu.add_separator()  # 添加一条分隔线
         # 设置
         cofigMenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='设置', menu=cofigMenu)
@@ -99,8 +103,10 @@ class APP(object):
         # 帮助
         helpmenu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label='帮助', menu=helpmenu)
-        helpmenu.add_command(label='建议和反馈', command=lambda: out_message(
-            '联系方式', '如需帮助，或者有建议和反馈请联系:\n\n耿润达\n手机：153 1313 9012\n微信同号'))
+        helpmenu.add_command(
+            label='建议和反馈',
+            command=lambda: out_message(
+                '联系方式', '如需帮助，或者有建议和反馈请联系:\n\n耿润达\n手机：153 1313 9012\n微信同号'))
         helpmenu.add_command(label='版本历史', command=self.changlog)
         ROOT.config(menu=menubar)
 
@@ -116,21 +122,22 @@ class APP(object):
         path7 = os.path.join(DIR, 'body_by_month', 'old')
         path8 = os.path.join(DIR, 'AltaGPS_Data')
         path9 = os.path.join(DIR, 'AltaGPS_Reports')
-        path_list = [path1, path2, path3, path4,
-                     path5, path6, path7, path8, path9]
+        path_list = [
+            path1, path2, path3, path4, path5, path6, path7, path8, path9
+        ]
         paths = ""
         paths_is = ""
         for i in range(0, 9):
             isExists = os.path.exists(path_list[i])
             if not isExists:
                 os.makedirs(path_list[i])
-                paths += '\n'+path_list[i]
+                paths += '\n' + path_list[i]
             else:
-                paths_is += '\n'+path_list[i]
-        res = '如下目录创建完成:\n'+paths
-        res2 = '如下目录已存在:\n'+paths_is
+                paths_is += '\n' + path_list[i]
+        res = '如下目录创建完成:\n' + paths
+        res2 = '如下目录已存在:\n' + paths_is
         if __name__ == '__main__':
-            out_message('执行完成', res+'\n\n'+res2)
+            out_message('执行完成', res + '\n\n' + res2)
         else:
             print(res, res2)
 
@@ -154,13 +161,16 @@ class APP(object):
         frame4.pack(side='right', anchor='n')  # 日志
 
         def updateName(*args):
-            s = self.farm.get()+'_体型明细_'+str(YMD[:6])+'.csv'
+            s = self.farm.get() + '_体型明细_' + str(YMD[:6]) + '.csv'
             self.last_body_list.delete(0, 'end')
             self.last_body_list.insert(0, s)
 
         def changeTag(tag):
-            for fre in[frame0, frame1, frame2, frame3, self.fe5, self.fe6,
-                       self.fe7, self.fe8, self.fe9, self.fe10]:
+            for fre in [
+                    frame0, frame1, frame2, frame3, self.fe5, self.fe6,
+                    self.fe7, self.fe8, self.fe9, self.fe10, self.fe11,
+                    self.fe_5_6
+            ]:
                 fre.pack_forget()
             if tag == 0:
                 self.fe8.pack(side='bottom', anchor='nw', pady=10)  # 存栏预测
@@ -170,9 +180,27 @@ class APP(object):
                 frame3.pack(side='top', anchor='nw')  # 生成选配文件
 
             elif tag == 1:
-                self.fe6.pack(side='right', anchor='nw')  # 工具2：提取配种记录
-                self.fe5.pack(side='top', anchor='nw')  # 工具1：合并体型
-                self.fe7.pack(side='top', anchor='sw')  # 工具3：提取定位文件
+
+                self.fe_5_6.pack(side='top', fill='x')
+
+                self.fe5.pack(side='left',
+                              anchor='nw',
+                              fill='both',
+                              expand='yes')  # 工具1：合并体型
+                self.fe6.pack(side='right',
+                              anchor='ne',
+                              fill='both',
+                              expand='yes')  # 工具2：提取配种记录
+                self.fe7.pack(side='left',
+                              anchor='sw',
+                              fill='both',
+                              expand='yes',
+                              pady=50)  # 工具3：提取定位文件
+                self.fe11.pack(side='right',
+                               anchor='se',
+                               fill='both',
+                               expand='yes',
+                               pady=50)  # 工具4：合并选配方案
             elif tag == 2:
                 pass
             elif tag == 3:
@@ -182,24 +210,46 @@ class APP(object):
 
         tag = tk.IntVar(value=0)
         tagWidth = 10
-        tk.Radiobutton(frame100, text="核心功能", width=tagWidth, variable=tag,
-                       value=0, bd=1, indicatoron=0, command=lambda:
-                       changeTag(0)).grid(column=0, row=0)
-        tk.Radiobutton(frame100, text="工具1-4", width=tagWidth, variable=tag,
-                       value=1, bd=1, indicatoron=0, command=lambda:
-                       changeTag(1)).grid(column=1, row=0)
-        tk.Radiobutton(frame100, text="维护牧场需求", width=tagWidth, variable=tag,
-                       value=3, bd=1, indicatoron=0, command=lambda:
-                       changeTag(3)).grid(column=2, row=0)
-        tk.Radiobutton(frame100, text="维护冻精前缀", width=tagWidth, variable=tag,
-                       value=4, bd=1, indicatoron=0, command=lambda:
-                       changeTag(4)).grid(column=3, row=0)
+        tk.Radiobutton(frame100,
+                       text="核心功能",
+                       width=tagWidth,
+                       variable=tag,
+                       value=0,
+                       bd=1,
+                       indicatoron=0,
+                       command=lambda: changeTag(0)).grid(column=0, row=0)
+        tk.Radiobutton(frame100,
+                       text="工具1-4",
+                       width=tagWidth,
+                       variable=tag,
+                       value=1,
+                       bd=1,
+                       indicatoron=0,
+                       command=lambda: changeTag(1)).grid(column=1, row=0)
+        tk.Radiobutton(frame100,
+                       text="维护牧场需求",
+                       width=tagWidth,
+                       variable=tag,
+                       value=3,
+                       bd=1,
+                       indicatoron=0,
+                       command=lambda: changeTag(3)).grid(column=2, row=0)
+        tk.Radiobutton(frame100,
+                       text="维护冻精前缀",
+                       width=tagWidth,
+                       variable=tag,
+                       value=4,
+                       bd=1,
+                       indicatoron=0,
+                       command=lambda: changeTag(4)).grid(column=3, row=0)
 
         # 第一步：导入牛群明细
         self.lb = tk.Label(frame0, text="\n第一步：导入牛群明细", padx=10, fg='blue')
         self.lb.grid(row=0, column=1, columnspan=2, sticky='w')
         self.lb = tk.Label(frame0, text="牧场名：", padx=10).grid(row=1, column=1)
-        self.farm = ttk.Combobox(frame0, width=67, state='readonly',
+        self.farm = ttk.Combobox(frame0,
+                                 width=67,
+                                 state='readonly',
                                  postcommand=lambda: self.getFarms(self.farm))
         self.farm.bind("<<ComboboxSelected>>", updateName)
         self.farm.grid(row=1, column=2)
@@ -207,11 +257,13 @@ class APP(object):
         self.herds = tk.Entry(frame0, width=70)
         self.herds.grid(row=2, column=2)
         self.re_load = tk.IntVar()
-        self.overLoad = tk.Checkbutton(frame0, variable=self.re_load,
+        self.overLoad = tk.Checkbutton(frame0,
+                                       variable=self.re_load,
                                        text='从牛群明细文件中读取，即不从pickle文件中读取')
         self.overLoad.grid(row=3, column=2, sticky='e')
-        w = tk.Label(frame0, text="下方为对应关系：每一个项目中找到一个即停止，按从左到右的顺序。" +
-                     "一般情况下不需要修改", padx=10)
+        w = tk.Label(frame0,
+                     text="下方为对应关系：每一个项目中找到一个即停止，按从左到右的顺序。" + "一般情况下不需要修改",
+                     padx=10)
         w.grid(row=4, column=1, columnspan=2, stick='w')
         with open(DB, 'rb') as db:
             col = pickle.load(db)['colums']
@@ -272,44 +324,67 @@ class APP(object):
         self.mgsid = tk.Entry(frame0, width=70, textvariable=val14)
         self.mgsid.grid(row=18, column=2)
         f_rc = tk.StringVar(value=','.join(col[14]))
-        tk.Label(frame0, text="繁殖代码",).grid(row=20, column=1)
+        tk.Label(
+            frame0,
+            text="繁殖代码",
+        ).grid(row=20, column=1)
         self.f_rc = tk.Entry(frame0, width=70, textvariable=f_rc)
         self.f_rc.grid(row=20, column=2)
 
         f_cdat = tk.StringVar(value=','.join(col[15]))
-        tk.Label(frame0, text="怀孕日期",).grid(row=60, column=1)
+        tk.Label(
+            frame0,
+            text="怀孕日期",
+        ).grid(row=60, column=1)
         self.f_cdat = tk.Entry(frame0, width=70, textvariable=f_cdat)
         self.f_cdat.grid(row=60, column=2)
 
         f_fdat = tk.StringVar(value=','.join(col[16]))
-        tk.Label(frame0, text="产犊日期",).grid(row=70, column=1)
+        tk.Label(
+            frame0,
+            text="产犊日期",
+        ).grid(row=70, column=1)
         self.f_fdat = tk.Entry(frame0, width=70, textvariable=f_fdat)
         self.f_fdat.grid(row=70, column=2)
 
         f_ddat = tk.StringVar(value=','.join(col[17]))
-        tk.Label(frame0, text="干奶日期",).grid(row=80, column=1)
+        tk.Label(
+            frame0,
+            text="干奶日期",
+        ).grid(row=80, column=1)
         self.f_ddat = tk.Entry(frame0, width=70, textvariable=f_ddat)
         self.f_ddat.grid(row=80, column=2)
 
         f_bday = tk.StringVar(value=','.join(col[18]))
-        tk.Label(frame0, text="配种日期",).grid(row=90, column=1)
+        tk.Label(
+            frame0,
+            text="配种日期",
+        ).grid(row=90, column=1)
         self.f_bday = tk.Entry(frame0, width=70, textvariable=f_bday)
         self.f_bday.grid(row=90, column=2)
 
         f_abdat = tk.StringVar(value=','.join(col[19]))
-        tk.Label(frame0, text="流产日期",).grid(row=100, column=1)
+        tk.Label(
+            frame0,
+            text="流产日期",
+        ).grid(row=100, column=1)
         self.f_abdat = tk.Entry(frame0, width=70, textvariable=f_abdat)
         self.f_abdat.grid(row=100, column=2)
 
         f_lsir = tk.StringVar(value=','.join(col[20]))
-        tk.Label(frame0, text="与配公牛",).grid(row=110, column=1)
+        tk.Label(
+            frame0,
+            text="与配公牛",
+        ).grid(row=110, column=1)
         self.f_lsir = tk.Entry(frame0, width=70, textvariable=f_lsir)
         self.f_lsir.grid(row=110, column=2)
 
-        self.upload = tk.Button(frame0, text="导入牛群明细",
+        self.upload = tk.Button(frame0,
+                                text="导入牛群明细",
                                 command=self.load_btnEvent)
         self.upload.grid(row=200, column=2, sticky='e', pady=10)
-        self.save = tk.Button(frame0, text="保存对应关系",
+        self.save = tk.Button(frame0,
+                              text="保存对应关系",
                               command=self.save_btnEvent)
         self.save.grid(row=200, column=1, sticky='e', pady=10)
         # 功能1：筛选体型
@@ -328,7 +403,8 @@ class APP(object):
         self.maxDIM.grid(row=30, column=5)
 
         tk.Label(frame1, text="").grid(row=40, column=5)
-        self.sel_body = tk.Button(frame1, text="筛选体型",
+        self.sel_body = tk.Button(frame1,
+                                  text="筛选体型",
                                   command=self.body_btnEvent)
         self.sel_body.grid(row=40, column=5, sticky='e')
         # 功能2：生成系谱
@@ -346,7 +422,8 @@ class APP(object):
         self.pgCol.grid(row=15, column=5)
 
         self.has_title = tk.IntVar()
-        self.needTitle = tk.Checkbutton(frame2, variable=self.has_title,
+        self.needTitle = tk.Checkbutton(frame2,
+                                        variable=self.has_title,
                                         text='保留标题行（第一行）')
         self.needTitle.grid(row=17, column=5, sticky='e')
 
@@ -403,33 +480,44 @@ class APP(object):
         self.bred_age.grid(row=13, column=8)
 
         self.isAdjust = tk.IntVar()
-        self.is_adjust = tk.Checkbutton(frame3, variable=self.isAdjust,
+        self.is_adjust = tk.Checkbutton(frame3,
+                                        variable=self.isAdjust,
                                         text='不调整冻精的比例')
         self.is_adjust.grid(row=14, column=8, sticky='e')
         self.isFill = tk.IntVar()
-        self.is_fill = tk.Checkbutton(frame3, variable=self.isFill,
+        self.is_fill = tk.Checkbutton(frame3,
+                                      variable=self.isFill,
                                       text='不填充匹配不上的')
         self.is_fill.grid(row=15, column=8, sticky='e')
 
         tk.Label(frame3, text="").grid(row=14, column=7)
-        self.matchfile = tk.Button(
-            frame3, text="生成选配文件", command=self.matchFile_btnEvent)
+        self.matchfile = tk.Button(frame3,
+                                   text="生成选配文件",
+                                   command=self.matchFile_btnEvent)
         self.matchfile.grid(row=20, column=8, sticky='e')
         tk.Label(frame3, text="").grid(row=20, column=6)
         self.lastData = tk.Button(
-            frame3, text="上次数据",
+            frame3,
+            text="上次数据",
             command=lambda: self.lastInfo_btnEvent(master))
         self.lastData.grid(row=20, column=7, sticky='e')
         # 功能4：日志输出
-        w = tk.Label(frame4, text="日志: \n(同时输出到ALTA_tool.log)", padx=10,
-                     fg='blue', justify='left')
+        w = tk.Label(frame4,
+                     text="日志: \n(同时输出到ALTA_tool.log)",
+                     padx=10,
+                     fg='blue',
+                     justify='left')
         w.grid(row=20, column=1, columnspan=2, sticky='w')
         s1 = tk.Scrollbar(frame4)
         s1.grid(row=21, column=3, sticky='ns')
         s2 = tk.Scrollbar(frame4, orient='horizontal')
         s2.grid(row=22, column=1, sticky='we', columnspan=2)
-        self.outflow = tk.Text(frame4, width=100, height=70, wrap='none',
-                               yscrollcommand=s1.set, xscrollcommand=s2.set)
+        self.outflow = tk.Text(frame4,
+                               width=100,
+                               height=70,
+                               wrap='none',
+                               yscrollcommand=s1.set,
+                               xscrollcommand=s2.set)
         self.outflow.grid(row=21, column=1, columnspan=2)
         self.outflow.configure(state='disabled')
         s1.config(command=self.outflow.yview)
@@ -448,15 +536,15 @@ class APP(object):
         else:
             try:
                 self.upload.config(state=tk.DISABLED, text='运行中...')
-                self.farm_code = pinyin.get_initial(
-                    self.farm.get(), delimiter="").upper()
+                self.farm_code = pinyin.get_initial(self.farm.get(),
+                                                    delimiter="").upper()
                 logger.debug('牧场名的拼音首字母'.format(self.farm_code))
-                logger.debug('执行的命令是：{}=Farm({},{},{})'.
-                             format(self.farm_code, self.farm.get(),
-                                    self.herds.get(), int(self.re_load.get())))
+                logger.debug('执行的命令是：{}=Farm({},{},{})'.format(
+                    self.farm_code, self.farm.get(), self.herds.get(),
+                    int(self.re_load.get())))
                 exec('self.farm_code=Farm(self.farm.get(),self.herds.get(),' +
                      'int(self.re_load.get()))')
-                self.loaded = 1   # 标识是否导入了牛群明细
+                self.loaded = 1  # 标识是否导入了牛群明细
             except Exception:
                 out_error('错误', traceback.format_exc())
                 self.loaded = 0
@@ -467,11 +555,12 @@ class APP(object):
 
     # 保存对应关系按钮事件
     def save_btnEvent(self):
-        items = [self.id, self.age, self.lact, self.rpro, self.dim,
-                 self.dsfrh, self.dopn, self.tbrd, self.milk1, self.milk2,
-                 self.pen, self.bdat, self.sid, self.mgsid, self.f_rc,
-                 self.f_cdat, self.f_fdat, self.f_ddat, self.f_bday,
-                 self.f_abdat, self.f_lsir]
+        items = [
+            self.id, self.age, self.lact, self.rpro, self.dim, self.dsfrh,
+            self.dopn, self.tbrd, self.milk1, self.milk2, self.pen, self.bdat,
+            self.sid, self.mgsid, self.f_rc, self.f_cdat, self.f_fdat,
+            self.f_ddat, self.f_bday, self.f_abdat, self.f_lsir
+        ]
         co = []
         for it in range(len(items)):
             co.append(items[it].get().replace(' ', '').strip(',').split(','))
@@ -520,12 +609,9 @@ class APP(object):
             else:
                 try:
                     self.sel_pg.config(state=tk.DISABLED, text='运行中...')
-                    logger.debug("执行的命令是：{}.produce_pedigree({},{},{})".
-                                 format(self.farm_code,
-                                        int(self.bredage.get()),
-                                        self.pgCol.get(),
-                                        self.has_title.get())
-                                 )
+                    logger.debug("执行的命令是：{}.produce_pedigree({},{},{})".format(
+                        self.farm_code, int(self.bredage.get()),
+                        self.pgCol.get(), self.has_title.get()))
                     exec("self.farm_code.produce_pedigree" +
                          "(int(self.bredage.get()), self.pgCol.get()" +
                          ", self.has_title.get())")
@@ -564,25 +650,34 @@ class APP(object):
                     self.matchfile.config(state=tk.NORMAL, text='生成选配文件')
                     return
         farm = {
-            'bred_age': int(self.bred_age.get()),
-            'sirs': com_sirs,
-            'sirs_rate': (self.com_rate.get().replace(' ', '').
-                          strip(',').split(',')),
-            'beef_list_file': self.beef_list.get(),
-            'beef_sirs': tuple(self.beef_sirs.get().
-                               replace(' ', '').strip(',').split(',')),
-            'DC_sexFile_heifer': self.sex_file.get(),
-            'sex_sirs': sex_sirs,
-            'sex_sirs_rate': (self.sex_rate.get().replace(' ', '').
-                              strip(',').split(',')),
-            'com_list_file': self.com_list.get(),
-            'isAdjust': self.isAdjust.get(),
-            'isFill': self.isFill.get()
+            'bred_age':
+            int(self.bred_age.get()),
+            'sirs':
+            com_sirs,
+            'sirs_rate':
+            (self.com_rate.get().replace(' ', '').strip(',').split(',')),
+            'beef_list_file':
+            self.beef_list.get(),
+            'beef_sirs':
+            tuple(self.beef_sirs.get().replace(' ', '').strip(',').split(',')),
+            'DC_sexFile_heifer':
+            self.sex_file.get(),
+            'sex_sirs':
+            sex_sirs,
+            'sex_sirs_rate':
+            (self.sex_rate.get().replace(' ', '').strip(',').split(',')),
+            'com_list_file':
+            self.com_list.get(),
+            'isAdjust':
+            self.isAdjust.get(),
+            'isFill':
+            self.isFill.get()
         }
         logger.debug("执行的命令是：{}.creat_match_file({}, **{})".format(
             self.farm_code, self.com_file.get(), farm))
         try:
-            exec("self.farm_code.creat_match_file(self.com_file.get(), **farm)")
+            exec(
+                "self.farm_code.creat_match_file(self.com_file.get(), **farm)")
         except Exception:
             out_error('错误', traceback.format_exc())
             return
@@ -591,11 +686,19 @@ class APP(object):
             out_message("完成", "选配文件已生成！\n具体细节请查看日志")
         finally:
             self.matchfile.config(state=tk.NORMAL, text='生成选配文件')
-            args = [self.farm.get(),
-                    self.com_file.get(), self.com_sirs.get(), self.com_rate.get(),
-                    self.beef_list.get(), self.beef_sirs.get(),
-                    self.sex_file.get(), self.sex_sirs.get(), self.sex_rate.get(),
-                    self.com_list.get(), self.bred_age.get()]  # 获取参数
+            args = [
+                self.farm.get(),
+                self.com_file.get(),
+                self.com_sirs.get(),
+                self.com_rate.get(),
+                self.beef_list.get(),
+                self.beef_sirs.get(),
+                self.sex_file.get(),
+                self.sex_sirs.get(),
+                self.sex_rate.get(),
+                self.com_list.get(),
+                self.bred_age.get()
+            ]  # 获取参数
             with open(DB, 'rb') as db:
                 dbDic = pickle.load(db)
             matchlog = dbDic['matchlog']  # 取出参数历史
@@ -616,8 +719,10 @@ class APP(object):
     # 上次数据按钮事件
     def lastInfo_btnEvent(self, master):
         farms = []
-        w = [self.v41, self.v42, self.v43, self.v44, self.v45, self.v48,
-             self.v49, self.v410, self.v411, self.v413]
+        w = [
+            self.v41, self.v42, self.v43, self.v44, self.v45, self.v48,
+            self.v49, self.v410, self.v411, self.v413
+        ]
         # num = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11]
         with open(DB, 'rb') as db:
             matchlog = pickle.load(db)['matchlog']
@@ -628,28 +733,33 @@ class APP(object):
         elif self.farm.get() in farms:
             i = farms.index(self.farm.get())
             for v in range(len(w)):
-                w[v].set(matchlog[i][v+1])
+                w[v].set(matchlog[i][v + 1])
         else:
-            tk.messagebox.showinfo(
-                '提示', self.farm.get() + '没有上次数据', parent=master)
+            tk.messagebox.showinfo('提示',
+                                   self.farm.get() + '没有上次数据',
+                                   parent=master)
             for v in range(len(w)):
                 w[v].set("")
 
     # 工具1: GUI 合并体型
     def merge_body_SubWin1(self, master):
-        self.fe5 = tk.Frame(master)
+        self.fe5 = tk.Frame(self.fe_5_6)
+        self.fe5.pack(side='left', anchor='s', padx=10)
 
-        w = tk.Label(self.fe5, text="工具1：合并体型文件", fg='blue')
+        w = tk.Label(self.fe5, text="\n工具1：合并体型文件", fg='blue', padx=10)
         w.grid(row=0, column=1, columnspan=3, sticky='w')
-        w = tk.Label(self.fe5, text="\n  把一个牧场的体型数据文件合并为一个excel文件，" +
+        w = tk.Label(self.fe5,
+                     text="\n  把一个牧场的体型数据文件合并为一个excel文件，" +
                      "同时把新数据追加到以前的数据中。\n")
         w.grid(row=1, column=1, columnspan=3, sticky='w')
 
         self.lb = tk.Label(self.fe5, text="牧场名：", width=16)
         self.lb.grid(row=2, column=1)
-        self.mb_farm1 = ttk.Combobox(self.fe5, width=55, state='readonly',
-                                     postcommand=lambda: self.getFarms(
-                                         self.mb_farm1))
+        self.mb_farm1 = ttk.Combobox(
+            self.fe5,
+            width=55,
+            state='readonly',
+            postcommand=lambda: self.getFarms(self.mb_farm1))
         self.mb_farm1.grid(row=2, column=2)
 
         self.lb = tk.Label(self.fe5, text="历史体型明细：", width=16)
@@ -670,15 +780,19 @@ class APP(object):
 
         self.lb = tk.Label(self.fe5, text="这次体型文件名：", width=16)
         self.lb.grid(row=5, column=1)
-        self.new_file = tk.Text(
-            self.fe5, width=50, height=6, yscrollcommand=s1.set,
-            xscrollcommand=s2.set, wrap='none')
+        self.new_file = tk.Text(self.fe5,
+                                width=50,
+                                height=6,
+                                yscrollcommand=s1.set,
+                                xscrollcommand=s2.set,
+                                wrap='none')
         self.new_file.grid(row=5, column=2)
         # 激活滚动条
         s1.config(command=self.new_file.yview)
         s2.config(command=self.new_file.xview)
 
-        self.lb = tk.Label(self.fe5, text="""
+        self.lb = tk.Label(self.fe5,
+                           text="""
         使用说明：
           1. 最新体型明细：格式为'牧场_体型明细_202001.csv'(不带引号)，
              保存在本程序目录下的Match_files目录下；
@@ -687,10 +801,12 @@ class APP(object):
              保存在本程序目录下的body_by_month下的old目录下；
           4. 本月汇总数据导出到本程序目录下的body_by_month下；
              （追加新数据后的）最新体型数据导出到Match_files目录下。""",
-                           justify='left', fg='blue')
+                           justify='left',
+                           fg='blue')
         self.lb.grid(row=7, column=1, columnspan=3)
 
-        self.merge = tk.Button(self.fe5, text="处理体型文件",
+        self.merge = tk.Button(self.fe5,
+                               text="处理体型文件",
                                command=self.mergeBodyBtn)
         self.merge.grid(row=8, column=2, sticky='e')
 
@@ -704,37 +820,46 @@ class APP(object):
 
     # 工具2: GUI 提取配种记录
     def extract_log_SubWin2(self, master):
-        self.fe6 = tk.Frame(master)
+        self.fe6 = tk.Frame(self.fe_5_6)
+        self.fe6.pack(side='left', anchor='s')
         # 设置垂直和水平滚动条
         s1 = tk.Scrollbar(self.fe6)
         s1.grid(row=2, column=3, sticky='ns')
         s2 = tk.Scrollbar(self.fe6, orient='horizontal')
         s2.grid(row=3, column=2, sticky='we')
-        w = tk.Label(self.fe6, text="工具2：提取配种记录", fg='blue', padx=10)
+        w = tk.Label(self.fe6, text="\n工具2：提取配种记录", fg='blue', padx=10)
         w.grid(row=0, column=1, columnspan=3, sticky='w')
-        w = tk.Label(self.fe6, text="\n此工具用按照特定顺序来从的配种记录文件中提取需要的列，" +
-                     "并导出以备后续使用\n", padx=10)
+        w = tk.Label(self.fe6,
+                     text="\n此工具用按照特定顺序来从的配种记录文件中提取需要的列，" + "并导出以备后续使用\n",
+                     padx=10)
         w.grid(row=1, column=1, columnspan=3)
 
         self.lb = tk.Label(self.fe6, text="配种记录文件：", width=16)
         self.lb.grid(row=2, column=1)
-        self.files2 = tk.Text(self.fe6, width=50, height=6,
-                              yscrollcommand=s1.set, xscrollcommand=s2.set,
+        self.files2 = tk.Text(self.fe6,
+                              width=50,
+                              height=6,
+                              yscrollcommand=s1.set,
+                              xscrollcommand=s2.set,
                               wrap='none')
         self.files2.grid(row=2, column=2)
         # 激活滚动条
         s1.config(command=self.files2.yview)
         s2.config(command=self.files2.xview)
 
-        self.lb = tk.Label(self.fe6, text="""
+        self.lb = tk.Label(self.fe6,
+                           text="""
         使用说明：
             1. 配种记录文件：包括后缀，如有多个文件，按行写；
             2. 配种记录文件必须放到BredLog文件夹下，
                导出的文件也在BredLog文件夹下。""",
-                           padx=10, justify='left', fg='blue')
+                           padx=10,
+                           justify='left',
+                           fg='blue')
         self.lb.grid(row=6, column=1, columnspan=3)
 
-        self.merge = tk.Button(self.fe6, text="导出配种记录",
+        self.merge = tk.Button(self.fe6,
+                               text="导出配种记录",
                                command=self.extractLogBtn)
         self.merge.grid(row=7, column=2, sticky='e')
 
@@ -756,31 +881,42 @@ class APP(object):
 
         w = tk.Label(self.fe7, text="工具3：提取定位文件", fg='blue')
         w.grid(row=0, column=1, columnspan=3, sticky='w')
-        self.lb = tk.Label(self.fe7, text="\n此工具用批量来提取GPS的定们文件并按牧场和年份汇总到一起" +
-                           "并导出以备后续使用\n", padx=10)
+        self.lb = tk.Label(self.fe7,
+                           text="\n此工具用批量来提取GPS的定们文件并按牧场和年份汇总到一起" +
+                           "并导出以备后续使用\n",
+                           padx=10)
         self.lb.grid(row=1, column=1, columnspan=3)
 
         self.lb = tk.Label(self.fe7, text="定位文件：", width=16)
         self.lb.grid(row=2, column=1)
-        self.files3 = tk.Text(self.fe7, width=50, height=6, yscrollcommand=s1.set,
-                              xscrollcommand=s2.set, wrap='none')
+        self.files3 = tk.Text(self.fe7,
+                              width=50,
+                              height=6,
+                              yscrollcommand=s1.set,
+                              xscrollcommand=s2.set,
+                              wrap='none')
         self.files3.grid(row=2, column=2)
         # 激活滚动条
         s1.config(command=self.files3.yview)
         s2.config(command=self.files3.xview)
 
-        self.lb = tk.Label(self.fe7, text="""
+        self.lb = tk.Label(self.fe7,
+                           text="""
         使用说明：
             1. 定位文件：包括后缀，如有多个文件，按行写；
             2. 配种记录文件必须放到Postions文件夹下，
                导出的文件也在Postions文件夹下；
             3. 为了准确识别牧场和年份(分组标记)，文件命名规则如下
                 规则：XXX_牧场名_年份.xlsx
-                例：GeneticPositioning_bj_2014.xlsx 
-                （XXX可以随意但不能含有点.和下划线_）""", padx=10, justify='left', fg='blue')
+                例：GeneticPositioning_bj_2014.xlsx
+                （XXX可以随意但不能含有点.和下划线_）""",
+                           padx=10,
+                           justify='left',
+                           fg='blue')
         self.lb.grid(row=6, column=1, columnspan=3)
 
-        self.merge = tk.Button(self.fe7, text="提取定位文件",
+        self.merge = tk.Button(self.fe7,
+                               text="提取定位文件",
                                command=self.mgerPosBtn)
         self.merge.grid(row=7, column=2, sticky='e')
 
@@ -791,54 +927,52 @@ class APP(object):
         else:
             out_error("错误", res[1:])
 
-    # 工具4：GUI 体型缺陷统计
-    def bscSummary(self):
-        self.fe8 = tk.Frame(master)
+    # 工具4： 合并选配方案文件
+    def merge_files_SubWin4(self, master):
+        self.fe11 = tk.Frame(master)
 
-        w = tk.Label(self.fe8, text="工具4：体型缺陷统计", fg='blue')
+        w = tk.Label(self.fe11, text="工具4：合并选配方案文件", fg='blue')
         w.grid(row=0, column=1, columnspan=3, sticky='w')
-        w = tk.Label(self.fe5, text="\n  从一个或多个牧场的体型数据文件分析体型性状缺陷情况。\n")
+        w = tk.Label(self.fe11, text="\n  把一个牧场的选配文件合并为一个excel文件。\n")
         w.grid(row=1, column=1, columnspan=3, sticky='w')
 
-        self.lb = tk.Label(self.fe5, text="按日期分别统计：", width=16)
+        self.lb = tk.Label(self.fe11, text="文件名前缀：", width=16)
         self.lb.grid(row=3, column=1)
-        self.last_file = tk.Entry(self.fe5, width=58)
-        self.last_file.grid(row=3, column=2)
+        self.file_name_pre = tk.Entry(self.fe11, width=58)
+        self.file_name_pre.grid(row=3, column=2)
 
-        self.lb = tk.Label(self.fe5, text="条件：", width=16)
+        self.lb = tk.Label(self.fe11, text="文件名后缀列表：", width=16)
         self.lb.grid(row=4, column=1)
-        self.this_date = tk.Entry(self.fe5, width=58)
-        self.this_date.grid(row=4, column=2)
+        self.files_list = tk.Entry(self.fe11, width=58)
+        self.files_list.grid(row=4, column=2)
 
-        # 设置垂直和水平滚动条
-        s1 = tk.Scrollbar(self.fe5)
-        s1.grid(row=5, column=3, sticky='ns')
-        s2 = tk.Scrollbar(self.fe5, orient='horizontal')
-        s2.grid(row=6, column=2, sticky='we')
-
-        self.lb = tk.Label(self.fe5, text="体型明细文件名：", width=16)
-        self.lb.grid(row=5, column=1)
-        self.new_file = tk.Text(
-            self.fe5, width=50, height=6, yscrollcommand=s1.set,
-            xscrollcommand=s2.set, wrap='none')
-        self.new_file.grid(row=5, column=2)
-        # 激活滚动条
-        s1.config(command=self.new_file.yview)
-        s2.config(command=self.new_file.xview)
-
-        self.lb = tk.Label(self.fe5, text="""
+        self.lb = tk.Label(self.fe11,
+                           text="""
         使用说明：
-          1. 最新体型明细：格式为'牧场_体型明细_202001.csv'(不带引号)，
-             保存在本程序目录下的Match_files目录下；
-          2. 这次做体型日期：格式为'YYYYMMDD',如'20200115'(不带引号)；
-          3. 体型明细文件名：包括后缀，如有多个文件，按行填写，
-             保存在本程序目录下的body_by_month下的old目录下；""",
-                           justify='left', fg='blue')
+          1. 此功能仅用于蚌埠牧场；
+          2. 文件名前缀为几个文件中前面固定的内容，到_为止；
+          3. 文件名后缀列表为_后面的数字或文字，以逗号（,）分割；
+          4. 结果文件保存到原目录，_后为'汇总'两字。""",
+                           justify='left',
+                           fg='blue')
         self.lb.grid(row=7, column=1, columnspan=3)
 
-        self.merge = tk.Button(self.fe5, text="处理体型文件",
-                               command=self.mergeBodyBtn)
-        self.merge.grid(row=8, column=2, sticky='e')
+        self.mergeFile = tk.Button(self.fe11,
+                                   text="合并选配方案",
+                                   command=self.mergeFileBtn)
+        self.mergeFile.grid(row=8, column=2, sticky='e')
+
+    def mergeFileBtn(self):
+        self.mergeFile.configure(state='disable', text='进行中...')
+        r = merge_files(
+            self.file_name_pre.get(),
+            self.files_list.get().replace(' ', '').replace(
+                '，', ',').strip(',').split(','))
+        if r[0] == "0":
+            out_message("执行成功", "合并完成")
+        else:
+            out_error("错误", r[1:])
+        self.mergeFile.configure(state='normal', text='合并选配方案')
 
     # 核心功能4：GUI 牛群存栏预测
     def forecast_SubWin4(self, master):
@@ -846,7 +980,7 @@ class APP(object):
         # , borderwidth=2, relief="groove"
         # TODO 禁配条件8
         # TODO 流产/淘汰牛的占比，进一步细化流产和淘汰比例
-        self.fe8 = tk.Frame(master)   # 主框架
+        self.fe8 = tk.Frame(master)  # 主框架
         fe1 = tk.Frame(self.fe8)  # 参配条件
         fe2 = tk.Frame(self.fe8)  # 发情揭发率
         fe3 = tk.Frame(self.fe8)  # 怀孕率
@@ -905,9 +1039,11 @@ class APP(object):
         pr1 = tk.StringVar(value=0.4)
         w = tk.Label(fe3, text="3 怀孕率：", fg='blue')
         w.grid(row=10, column=10, sticky='w', columnspan=20)
-        self.is_bcPR = tk.IntVar(value=2)   # 1为使用给定参数，2为使用平均配次推算
-        cbt = tk.Radiobutton(fe3, text='用以下给定值',
-                             variable=self.is_bcPR, value=1)
+        self.is_bcPR = tk.IntVar(value=2)  # 1为使用给定参数，2为使用平均配次推算
+        cbt = tk.Radiobutton(fe3,
+                             text='用以下给定值',
+                             variable=self.is_bcPR,
+                             value=1)
         cbt.grid(row=15, column=10, sticky='w', columnspan=20)
         tk.Label(fe3, text="青年牛：", width=8).grid(row=20, column=10)
         tk.Label(fe3, text="成母牛：").grid(row=30, column=10)
@@ -916,10 +1052,12 @@ class APP(object):
         self.prCow = tk.Entry(fe3, width=14, textvariable=pr1)
         self.prCow.grid(row=30, column=20)
 
-        lact = tk.StringVar(value=1)   # 使用推算参数
+        lact = tk.StringVar(value=1)  # 使用推算参数
         tbrd = tk.StringVar(value=9)
-        cbt = tk.Radiobutton(fe3, text='用平均配次推算',
-                             variable=self.is_bcPR, value=2)
+        cbt = tk.Radiobutton(fe3,
+                             text='用平均配次推算',
+                             variable=self.is_bcPR,
+                             value=2)
         cbt.grid(row=40, column=10, sticky='w', columnspan=20)
         tk.Label(fe3, text="最大胎次：", width=10).grid(row=50, column=10)
         tk.Label(fe3, text="最大配次：").grid(row=60, column=10)
@@ -927,10 +1065,14 @@ class APP(object):
         self.useLact.grid(row=50, column=20)
         self.useTbrd = tk.Entry(fe3, width=14, textvariable=tbrd)
         self.useTbrd.grid(row=60, column=20)
-        self.caPRbtn = tk.Button(
-            fe3, text="查看推算的怀孕率", command=self.PR_btnEvent)
-        self.caPRbtn.grid(row=70, column=10, columnspan=20,
-                          sticky='e', pady=10)
+        self.caPRbtn = tk.Button(fe3,
+                                 text="查看推算的怀孕率",
+                                 command=self.PR_btnEvent)
+        self.caPRbtn.grid(row=70,
+                          column=10,
+                          columnspan=20,
+                          sticky='e',
+                          pady=10)
 
         # fe4 流产率
         aboRate = tk.StringVar(value=0.05)
@@ -1028,11 +1170,13 @@ class APP(object):
         self.end.grid(row=3, column=2)
         self.suffix = tk.Entry(fe8, width=40, textvariable=fileSuffix)
         self.suffix.grid(row=4, column=2)
-        self.forecast_btn = tk.Button(
-            fe8, text="开始预测(1)", command=self.startForecast_btnEvent)
+        self.forecast_btn = tk.Button(fe8,
+                                      text="开始预测(1)",
+                                      command=self.startForecast_btnEvent)
         self.forecast_btn.grid(row=6, column=1, sticky='e', pady=10)
         self.forecast2_btn = tk.Button(
-            fe8, text="开始预测(2)",
+            fe8,
+            text="开始预测(2)",
             command=lambda: self.startForecast_btnEvent(2))
         self.forecast2_btn.grid(row=6, column=2, sticky='e', pady=10)
 
@@ -1042,7 +1186,7 @@ class APP(object):
         lact = self.useLact.get().replace(" ", "")
         tbrd = self.useTbrd.get().replace(" ", "")
         logger.debug("self.is_bcPR.get():".format(self.is_bcPR.get()))
-        #if self.is_bcPR.get() != 2:
+        # if self.is_bcPR.get() != 2:
         #    out_message('警告', '未选定使用推算的方法计算怀孕率')
         #    self.caPRbtn.configure(state='normal', text='查看推算的怀孕率')
         #    return
@@ -1092,11 +1236,13 @@ class APP(object):
         entryedit = ""
         okb = ""
         off = 10
-        columns = ('牧场', '排序', '用肉牛否', '青年用性控否', '前几配次用性控', '成母用性控否',
-                   '前几胎用性控', '前几配用性控', '选配文件格式', '配种组文件')
+        columns = ('牧场', '排序', '用肉牛否', '青年用性控否', '前几配次用性控', '成母用性控否', '前几胎用性控',
+                   '前几配用性控', '选配文件格式', '配种组文件')
         colWidth = [50, 50, 60, 80, 80, 80, 80, 80, 80, 180]
-        treeview = ttk.Treeview(
-            self.fe9, height=40, show="headings", columns=columns)  # 表格 height=40,
+        treeview = ttk.Treeview(self.fe9,
+                                height=40,
+                                show="headings",
+                                columns=columns)  # 表格 height=40,
         for i in range(len(columns)):  # 显示表头
             treeview.column(columns[i], width=colWidth[i], anchor='center')
             treeview.heading(columns[i], text=columns[i])  # 显示表头
@@ -1115,8 +1261,9 @@ class APP(object):
             # rearrange items in sorted positions
             for index, (val, k) in enumerate(sm):  # 根据排序后索引移动
                 tv.move(k, '', index)
-            tv.heading(col, command=lambda: treeview_sort_column(
-                tv, col, not reverse))  # 重写标题，使之成为再点倒序的标题
+            tv.heading(col,
+                       command=lambda: treeview_sort_column(
+                           tv, col, not reverse))  # 重写标题，使之成为再点倒序的标题
 
         def set_cell_value(event):  # 双击进入编辑状态
             nonlocal entryedit, okb
@@ -1129,28 +1276,32 @@ class APP(object):
             row = treeview.identify_row(event.y)  # 行
             x, y, w, h = treeview.bbox(row, column)
             cn = int(str(column).replace('#', ''))
-            entryedit = tk.Text(self.fe9, width=colWidth[cn-1]//7, height=1)
+            entryedit = tk.Text(self.fe9,
+                                width=colWidth[cn - 1] // 7,
+                                height=1)
             try:
-                entryedit.insert('end', item_text[cn-1])
+                entryedit.insert('end', item_text[cn - 1])
             except IndexError:
                 pass
-            entryedit.place(x=x+off, y=y+h)
+            entryedit.place(x=x + off, y=y + h)
             entryedit.tag_add("tag1", "0.0", "end")
             entryedit.tag_config("tag1", justify='center')
 
             def saveedit():
-                treeview.set(item, column=column,
+                treeview.set(item,
+                             column=column,
                              value=entryedit.get(0.0, "end").split('\n')[0])
                 entryedit.destroy()
                 okb.destroy()
 
             okb = ttk.Button(self.fe9, text='确认', width=4, command=saveedit)
-            okb.place(x=x+colWidth[cn-1]-5+off, y=y+h-3)
+            okb.place(x=x + colWidth[cn - 1] - 5 + off, y=y + h - 3)
 
-        def newrow():   # 新建牧场
+        def newrow():  # 新建牧场
             t = str(len(treeview.get_children()))
-            nt = str(int(t)+1)
-            newdata = ('牧场'+nt, 100+int(nt), 0, 0, 0, 0, 0, 0, 0, 'nothing')
+            nt = str(int(t) + 1)
+            newdata = ('牧场' + nt, 100 + int(nt), 0, 0, 0, 0, 0, 0, 0,
+                       'nothing')
             treeview.insert('', int(t), values=newdata)
             treeview.update()
             newbState(int(nt))
@@ -1164,7 +1315,7 @@ class APP(object):
                 dbDic = pickle.load(db)  # db数据字典
             dbDic['demand'] = newDemand  # 把修改后的数据写进db的字典的demand中
             with open(DB, 'wb') as db:
-                pickle.dump(dbDic, db)   # 把修改后的数据写进数据库
+                pickle.dump(dbDic, db)  # 把修改后的数据写进数据库
             tk.messagebox.showinfo('保存成功', '数据保存成功', parent=self.fe9)
 
         def delete():
@@ -1177,7 +1328,7 @@ class APP(object):
         def newbState(num):
             t = 39
             if num >= t:
-                newb.config(state='disable', text='最多可以有'+str(t)+'个牧场')
+                newb.config(state='disable', text='最多可以有' + str(t) + '个牧场')
             else:
                 newb.config(state='normal', text='新建牧场')
 
@@ -1199,7 +1350,8 @@ class APP(object):
         # newb.place(x=120, y=(len(name)-1)*20+45)
 
         for col in columns:  # 绑定函数，使表头可排序
-            treeview.heading(col, text=col,
+            treeview.heading(col,
+                             text=col,
                              command=lambda _col=col: treeview_sort_column(
                                  treeview, _col, False))
 
@@ -1211,8 +1363,10 @@ class APP(object):
         off = 10
         columns = ('常规冻精NAAB号前缀', '性控冻精NAAB号前缀')
         colWidth = [100, 100]
-        treeview = ttk.Treeview(
-            self.fe10, height=40, show="headings", columns=columns)  # 表格
+        treeview = ttk.Treeview(self.fe10,
+                                height=40,
+                                show="headings",
+                                columns=columns)  # 表格
         for i in range(len(columns)):  # 显示表头
             treeview.column(columns[i], width=colWidth[i], anchor='center')
             treeview.heading(columns[i], text=columns[i])  # 显示表头
@@ -1231,8 +1385,9 @@ class APP(object):
             # rearrange items in sorted positions
             for index, (val, k) in enumerate(sm):  # 根据排序后索引移动
                 tv.move(k, '', index)
-            tv.heading(col, command=lambda: treeview_sort_column(
-                tv, col, not reverse))  # 重写标题，使之成为再点倒序的标题
+            tv.heading(col,
+                       command=lambda: treeview_sort_column(
+                           tv, col, not reverse))  # 重写标题，使之成为再点倒序的标题
 
         def set_cell_value(event):  # 双击进入编辑状态
             nonlocal entryedit, okb
@@ -1245,27 +1400,30 @@ class APP(object):
             row = treeview.identify_row(event.y)  # 行
             x, y, w, h = treeview.bbox(row, column)
             cn = int(str(column).replace('#', ''))
-            entryedit = tk.Text(self.fe10, width=colWidth[cn-1]//7, height=1)
+            entryedit = tk.Text(self.fe10,
+                                width=colWidth[cn - 1] // 7,
+                                height=1)
             try:
-                entryedit.insert('end', item_text[cn-1])
+                entryedit.insert('end', item_text[cn - 1])
             except IndexError:
                 pass
-            entryedit.place(x=x+off, y=y+h)
+            entryedit.place(x=x + off, y=y + h)
             entryedit.tag_add("tag1", "0.0", "end")
             entryedit.tag_config("tag1", justify='center')
 
             def saveedit():
-                treeview.set(item, column=column,
+                treeview.set(item,
+                             column=column,
                              value=entryedit.get(0.0, "end").split('\n')[0])
                 entryedit.destroy()
                 okb.destroy()
 
             okb = ttk.Button(self.fe10, text='确认', width=4, command=saveedit)
-            okb.place(x=x+colWidth[cn-1]-5+off, y=y+h-3)
+            okb.place(x=x + colWidth[cn - 1] - 5 + off, y=y + h - 3)
 
-        def newrow():   # 新建牧场
+        def newrow():  # 新建牧场
             t = str(len(treeview.get_children()))
-            nt = str(int(t)+1)
+            nt = str(int(t) + 1)
             newLine = ('HO', 'HO')
             treeview.insert('', int(t), values=newLine)
             treeview.update()
@@ -1280,7 +1438,7 @@ class APP(object):
                 dbDic = pickle.load(db)  # db数据字典
             dbDic['com2sex'] = newData  # 把修改后的数据写进db的字典的demand中
             with open(DB, 'wb') as db:
-                pickle.dump(dbDic, db)   # 把修改后的数据写进数据库
+                pickle.dump(dbDic, db)  # 把修改后的数据写进数据库
             tk.messagebox.showinfo('保存成功', '数据保存成功', parent=self.fe10)
 
         def delete():
@@ -1293,7 +1451,7 @@ class APP(object):
         def newbState(num):
             t = 39
             if num >= t:
-                newb.config(state='disable', text='最多可以有'+str(t)+'条记录')
+                newb.config(state='disable', text='最多可以有' + str(t) + '条记录')
             else:
                 newb.config(state='normal', text='新增')
 
@@ -1312,9 +1470,10 @@ class APP(object):
         # newb.place(x=120, y=(len(name)-1)*20+45)
 
         for col in columns:  # 绑定函数，使表头可排序
-            treeview.heading(
-                col, text=col, command=lambda _col=col: treeview_sort_column(
-                    treeview, _col, False))
+            treeview.heading(col,
+                             text=col,
+                             command=lambda _col=col: treeview_sort_column(
+                                 treeview, _col, False))
 
     # 开始预测按钮事件
     def startForecast_btnEvent(self, method=1):
@@ -1333,42 +1492,49 @@ class APP(object):
         elif method == 2:
             self.forecast_btn.config(state=tk.DISABLED)
             self.forecast2_btn.config(state=tk.DISABLED, text='运行中...')
-        onOff = [self.bcbred.get(), self.bcHDR.get(), self.is_bcPR.get(),
-                 self.bcABR.get(), self.bcFemalR.get(),
-                 self.bcCUR.get(), self.bcBP.get()]
+        onOff = [
+            self.bcbred.get(),
+            self.bcHDR.get(),
+            self.is_bcPR.get(),
+            self.bcABR.get(),
+            self.bcFemalR.get(),
+            self.bcCUR.get(),
+            self.bcBP.get()
+        ]
         try:
-            args = {'fbage': self.f_agefb.get(),
-                    'wwtp': self.f_wwtp.get(),
-                    'hdrH': self.hdrL0.get(),
-                    'hdrC': self.hdrL1.get(),
-                    'prH': self.prHeifer.get(),
-                    'prC': self.prCow.get(),
-                    'aboRate': self.aboRate.get(),
-                    'aboRateC': self.aboRateC.get(),
-                    'femalRateC': self.femalRateC.get(),
-                    'femalRateS': self.femalRateS.get(),
-                    'femalRateB': self.femalRateB.get(),
-                    'calfCulRate': self.calfCulRate.get(),
-                    'yongCulRate': self.yongCulRate.get(),
-                    'cowCulRate': self.cowCulRate.get(),
-                    'sexLact': self.sexLact.get(),
-                    'sexTbrd': self.sexTbrd.get(),
-                    'beefLact': self.beefLact.get(),
-                    'beefRate': self.beefRate.get()
-                    }
+            args = {
+                'fbage': self.f_agefb.get(),
+                'wwtp': self.f_wwtp.get(),
+                'hdrH': self.hdrL0.get(),
+                'hdrC': self.hdrL1.get(),
+                'prH': self.prHeifer.get(),
+                'prC': self.prCow.get(),
+                'aboRate': self.aboRate.get(),
+                'aboRateC': self.aboRateC.get(),
+                'femalRateC': self.femalRateC.get(),
+                'femalRateS': self.femalRateS.get(),
+                'femalRateB': self.femalRateB.get(),
+                'calfCulRate': self.calfCulRate.get(),
+                'yongCulRate': self.yongCulRate.get(),
+                'cowCulRate': self.cowCulRate.get(),
+                'sexLact': self.sexLact.get(),
+                'sexTbrd': self.sexTbrd.get(),
+                'beefLact': self.beefLact.get(),
+                'beefRate': self.beefRate.get()
+            }
         except Exception:
             out_message("警告", "参数获取错误，请先推算怀孕率")
             logger.debug(traceback.format_exc())
             self.forecast_btn.config(state=tk.NORMAL, text='开始预测(1)')
             self.forecast2_btn.config(state=tk.NORMAL, text='开始预测(2)')
             return
-        logger.info("执行的命令是：{}.forecast({},{},{},{},{}, {})".
-                    format(self.farm_code, self.start.get(), self.end.get(),
-                           self.suffix.get(), onOff, args, method))
-        self.PR_btnEvent()   # 计算怀孕率参数
+        logger.info("执行的命令是：{}.forecast({},{},{},{},{}, {})".format(
+            self.farm_code, self.start.get(), self.end.get(),
+            self.suffix.get(), onOff, args, method))
+        self.PR_btnEvent()  # 计算怀孕率参数
         try:
             exec("self.farm_code.forecast(self.start.get()," +
-                    "self.end.get(), self.suffix.get(), onOff, args, method)")
+                 "self.end.get(), self.suffix.get(), onOff, args, method)")
         except Exception:
             self.forecast_btn.config(state=tk.NORMAL, text='开始预测(1)')
             self.forecast2_btn.config(state=tk.NORMAL, text='开始预测(2)')
@@ -1389,6 +1555,14 @@ def quite():
 
 # 如果直接执行，则启动GUI主窗口
 if __name__ == '__main__':
+    if os.path.exists(DB):
+        logger.debug("Yes")
+    else:
+        logger.debug("NO")
+        os.mkdir("Match_files")
+        writedb(DB, loaddb())
+        logger.debug("DONE")
+
     # 主窗口
     ROOT = tk.Tk()
     ROOT.title("艾格威技术支持工具包")
@@ -1405,7 +1579,7 @@ if __name__ == '__main__':
     togui = LogtoUi(app.outflow)
     ui = logging.StreamHandler(stream=togui)
     # ui.setFormatter(formatter)
-    ui.setLevel(logging.INFO)    # 日志级别: UI中的级别
+    ui.setLevel(logging.INFO)  # 日志级别: UI中的级别
     logger.addHandler(ui)
     # logger.debug('debug message')
     # logger.warning('warning message')
