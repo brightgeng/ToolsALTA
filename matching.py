@@ -18,12 +18,7 @@ import xlwings as xw
 
 from error import MyException
 from log import logger
-
-DATE0 = datetime.datetime(1970, 1, 1)
-DIR = r"c:\Users\runda\OneDrive - RundaTech\04 工作\0405 艾格威贸易\ALTA_Matching"
-YMD = time.strftime("%Y%m%d", time.localtime())
-DOUT = sys.stdout
-DB = os.path.join(DIR, 'Match_files', 'AltaTools.db')
+from parameters import DATE0, DB, DIR, YMD
 
 
 # 主功能（筛选体型，生成系谱，生成选配文件）
@@ -107,7 +102,8 @@ class Farm(object):
         else:
             self.herds['RC'] = self.herds['繁殖代码']
         if tofile:
-            file = os.path.join(DIR, self.name + '_主要信息_含RC_' + YMD + '.csv')
+            file = os.path.join(DIR, "主要信息",
+                                self.name + '_主要信息_含RC_' + YMD + '.csv')
             self.herds.to_csv(file,
                               index=True,
                               header=True,
@@ -191,7 +187,7 @@ class Farm(object):
             else:
                 logger.info('未提取到列:{}, 文件中未找到{}'.format(
                     cls[index], colums[index]))
-                herds1[cls[index]+"_"] = ""
+                herds1[cls[index] + "_"] = ""
         logger.info('提取完成。')
 
         # 去除重复耳号及空耳号
@@ -257,7 +253,8 @@ class Farm(object):
         herds1['胎次'] = herds1['胎次'].astype('int')
         herds1['配种组'] = herds1['配种组'].astype('int')
 
-        result_file = os.path.join(DIR, self.name + '_主要信息_' + YMD + '.csv')
+        result_file = os.path.join(DIR, "主要信息",
+                                   self.name + '_主要信息_' + YMD + '.csv')
         logger.info('文件中共有牛头数：【{}】'.format(len(herds1)))
         logger.info('数据保存中...')
         herds1.to_csv(result_file,
@@ -2020,8 +2017,20 @@ class Farm(object):
 
 #  存栏预测方法2
 class Cattle():
-    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                 lsbd, abdat, lsir, semen, isNewBorn=0):
+    def __init__(self,
+                 id,
+                 rc,
+                 lact,
+                 tbrd,
+                 bdat,
+                 cdat,
+                 fdat,
+                 ddat,
+                 lsbd,
+                 abdat,
+                 lsir,
+                 semen,
+                 isNewBorn=0):
         self.id = id
         self.rc = rc
         self.lact = min(lact, 7)
@@ -2062,7 +2071,7 @@ class Cattle():
 
         self.closeDay = Args.DATE0
         self.abortTag = 0  # 流产标记 0未流产，1流产过
-        self.cullTag = 0   # 流产标记 0未淘汰，1淘汰
+        self.cullTag = 0  # 流产标记 0未淘汰，1淘汰
         self.lsir = lsir
         self.semen = semen
 
@@ -2107,8 +2116,10 @@ class Args():
     def init(cls):
         cls.DATE0 = datetime.date(1970, 1, 1)
         cls.HERDSDATE = datetime.date(1970, 1, 1)
-        cls.BABY = [0, 0, 0, 0, cls.DATE0, cls.DATE0,
-                    cls.DATE0, cls.DATE0, cls.DATE0, cls.DATE0, -1, 0]
+        cls.BABY = [
+            0, 0, 0, 0, cls.DATE0, cls.DATE0, cls.DATE0, cls.DATE0, cls.DATE0,
+            cls.DATE0, -1, 0
+        ]
         cls.CHK1 = 28
         cls.CHK2 = 60
         cls.CHK3 = 120
@@ -2116,8 +2127,8 @@ class Args():
         cls.mth = 0
 
     @classmethod
-    def proInit(cls, AGEFB, WWTP, HDR, PREG_RATE, ABORT_RATE,
-                FEMAL, LEAVE, BRED_PLAN, ABORT_STR):
+    def proInit(cls, AGEFB, WWTP, HDR, PREG_RATE, ABORT_RATE, FEMAL, LEAVE,
+                BRED_PLAN, ABORT_STR):
         cls.AGEFB = AGEFB
         cls.WWTP = WWTP
         cls.HDR = HDR
@@ -2126,24 +2137,37 @@ class Args():
         cls.FEMAL = FEMAL
         cls.LEAVE = LEAVE
         cls.BRED_PLAN = BRED_PLAN
-        cls.ABORT_STR = [0.01, 0.23, 0.32, 0.12,
-                         0.08, 0.05, 0.05, 0.06, 0.06, 0.02]
+        cls.ABORT_STR = [
+            0.01, 0.23, 0.32, 0.12, 0.08, 0.05, 0.05, 0.06, 0.06, 0.02
+        ]
 
 
 class Bull(Cattle):
-    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                 lsbd, abdat, lsir, semen):
-        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                         lsbd, abdat, lsir, semen)
+    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat, lsbd, abdat,
+                 lsir, semen):
+        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat, lsbd,
+                         abdat, lsir, semen)
         Summary.BullNum += 1
         Summary.BullSet.add(self)
 
 
 class Cow(Cattle):
-    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                 lsbd, abdat, lsir, semen, isNewBorn=0):
-        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                         lsbd, abdat, lsir, semen, isNewBorn)
+    def __init__(self,
+                 id,
+                 rc,
+                 lact,
+                 tbrd,
+                 bdat,
+                 cdat,
+                 fdat,
+                 ddat,
+                 lsbd,
+                 abdat,
+                 lsir,
+                 semen,
+                 isNewBorn=0):
+        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat, lsbd,
+                         abdat, lsir, semen, isNewBorn)
         self.preTreat()
         self.updateRC()
         if isNewBorn:
@@ -2170,7 +2194,7 @@ class Cow(Cattle):
                 if self.abdat > Args.DATE0:  # 流产空怀牛
                     self.dslb = min((Args.HERDSDATE - self.abdat).days,
                                     (Args.HERDSDATE - self.lsbd).days)
-                elif self.abdat <= Args.DATE0:   # 孕检空怀牛
+                elif self.abdat <= Args.DATE0:  # 孕检空怀牛
                     dcc = (Args.HERDSDATE - self.lsbd).days
                     if dcc >= Args.CHK4:
                         self.dslb = dcc - Args.CHK4
@@ -2185,7 +2209,7 @@ class Cow(Cattle):
 
         if self.cdat > Args.DATE0:  # 怀孕牛
             self.dcc = (Args.HERDSDATE - self.cdat).days
-            self.mcc = min(int((self.dcc+9)/30), 9)
+            self.mcc = min(int((self.dcc + 9) / 30), 9)
             dcc = int(normalvariate(273, 3))
             self.due = self.cdat + datetime.timedelta(dcc)
             if self.due <= Args.HERDSDATE:
@@ -2241,7 +2265,7 @@ class Cow(Cattle):
     def cowGrow(self, today, day, isMonthEnd):
         if self.dcc >= 0:
             self.dcc += day
-            self.mcc = min(int((self.dcc+9)/30), 9)
+            self.mcc = min(int((self.dcc + 9) / 30), 9)
         if self.dim >= 0:
             self.dim += day
         if self.dslb >= 0:
@@ -2256,15 +2280,17 @@ class Cow(Cattle):
                 self.dry(today - datetime.timedelta(self.dcc - 220))
             if isMonthEnd and self.abortTag == 0:  # 月底流产
                 if self.lact == 0:
-                    if random() <= Args.ABORT_RATE[0]*Args.ABORT_STR[self.mcc]:
+                    if random(
+                    ) <= Args.ABORT_RATE[0] * Args.ABORT_STR[self.mcc]:
                         self.abort(today)
                 elif self.lact > 0:
-                    if random() <= Args.ABORT_RATE[1]*Args.ABORT_STR[self.mcc]:
+                    if random(
+                    ) <= Args.ABORT_RATE[1] * Args.ABORT_STR[self.mcc]:
                         self.abort(today)
         elif self.rc == 2:  # 新产牛
             if self.dim >= Args.WWTP:
-                self.heat(
-                    today - datetime.timedelta(self.dim - Args.WWTP), today)
+                self.heat(today - datetime.timedelta(self.dim - Args.WWTP),
+                          today)
         elif self.rc == 3:  # 空怀牛
             if self.dslb >= 21:
                 self.heat(today - datetime.timedelta(self.dslb - 21), today)
@@ -2278,9 +2304,8 @@ class Cow(Cattle):
                 self.dslb = 0
         elif self.rc == 0:  # 未配青年牛
             if self.ageDay >= Args.AGEFB:
-                self.heat(
-                    today - datetime.timedelta(self.ageDay - Args.AGEFB),
-                    today)
+                self.heat(today - datetime.timedelta(self.ageDay - Args.AGEFB),
+                          today)
 
     def heat(self, heatDay, today):
         if heatDay < Args.HERDSDATE:
@@ -2312,7 +2337,7 @@ class Cow(Cattle):
         self.cdat = pregDay
         self.due = pregDay + datetime.timedelta(dcc)
         self.dcc = self.dslb
-        self.mcc = min(int((self.dcc+9)/30), 9)
+        self.mcc = min(int((self.dcc + 9) / 30), 9)
         self.rc = 5
         Summary.PREG_NUM += 1
 
@@ -2349,9 +2374,9 @@ class Cow(Cattle):
         self.ddat = Args.DATE0
         self.dslb = -1
         self.rc = 2
-        self.lact = min(self.lact+1, 7)
+        self.lact = min(self.lact + 1, 7)
         self.tbrd = 0
-        self.abortTag = 0   # 流产标记复位
+        self.abortTag = 0  # 流产标记复位
         Summary.FRESH_NUM += 1
         if self.semen == 0:  # 常规
             femal = Args.FEMAL['com'][Args.mth]
@@ -2377,11 +2402,11 @@ class Cow(Cattle):
     def cull(self):
         if self.lact == 0:
             if self.ageDay < Args.AGEFB:
-                cullRate = Args.LEAVE['calfCulRate'][Args.mth]/12
+                cullRate = Args.LEAVE['calfCulRate'][Args.mth] / 12
             else:
-                cullRate = Args.LEAVE['yongCulRate'][Args.mth]/12
+                cullRate = Args.LEAVE['yongCulRate'][Args.mth] / 12
         else:  #
-            cullRate = Args.LEAVE['cowCulRate'][Args.mth]/12
+            cullRate = Args.LEAVE['cowCulRate'][Args.mth] / 12
 
         if self.rc == 1 or random() <= cullRate:
             Summary.CULL_NUM += 1
@@ -2389,22 +2414,22 @@ class Cow(Cattle):
 
 
 class Calf(Cow):
-    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                 lsbd, abdat, lsir, semen, isNewBorn):
-        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat,
-                         lsbd, abdat, lsir, semen, isNewBorn)
+    def __init__(self, id, rc, lact, tbrd, bdat, cdat, fdat, ddat, lsbd, abdat,
+                 lsir, semen, isNewBorn):
+        super().__init__(id, rc, lact, tbrd, bdat, cdat, fdat, ddat, lsbd,
+                         abdat, lsir, semen, isNewBorn)
 
 
-def forecast2(herds, start, end, parameter_suffix,  AGEFB, WWTP, HDR,
-              PREG_RATE, ABORT_RATE, FEMAL, LEAVE, BRED_PLAN, ABORT_STR):
+def forecast2(herds, start, end, parameter_suffix, AGEFB, WWTP, HDR, PREG_RATE,
+              ABORT_RATE, FEMAL, LEAVE, BRED_PLAN, ABORT_STR):
     logger.info(datetime.datetime.now())
     logger.info("0 方法2初始化中")
     logger.info("怀孕率参数为：{}".format(PREG_RATE))
-    Summary.init()    # 存储中间数据的类属性初始化
-    Args.init()   # 存储常数的类属性初始化
+    Summary.init()  # 存储中间数据的类属性初始化
+    Args.init()  # 存储常数的类属性初始化
     # 繁殖参数初始化
-    Args.proInit(AGEFB*30.5, WWTP, HDR, PREG_RATE, ABORT_RATE,
-                 FEMAL, LEAVE, BRED_PLAN, ABORT_STR)
+    Args.proInit(AGEFB * 30.5, WWTP, HDR, PREG_RATE, ABORT_RATE, FEMAL, LEAVE,
+                 BRED_PLAN, ABORT_STR)
 
     # 日期格式转换
     colu = ['bdat', 'cdat', 'fdat', 'ddat', 'lsbd', 'abdat']
@@ -2415,9 +2440,10 @@ def forecast2(herds, start, end, parameter_suffix,  AGEFB, WWTP, HDR,
     start = start.date()
     end = end.date()
 
-    cos = ["期初", "留养", "产犊", "围产", "干奶", "流产", "怀孕", "配种",
-           "发情", "死淘", "期末", "检查", "成母", "青年", "青年怀孕", "成母怀孕",
-           "成母泌乳", "常规冻精用量", "性控冻精用量", "肉牛冻精用量"]
+    cos = [
+        "期初", "留养", "产犊", "围产", "干奶", "流产", "怀孕", "配种", "发情", "死淘", "期末", "检查",
+        "成母", "青年", "青年怀孕", "成母怀孕", "成母泌乳", "常规冻精用量", "性控冻精用量", "肉牛冻精用量"
+    ]
     SUMMARY = pd.DataFrame(columns=cos)
 
     # 开始生长循环
@@ -2450,8 +2476,10 @@ def forecast2(herds, start, end, parameter_suffix,  AGEFB, WWTP, HDR,
         if passDays == 0:
             break
         # 生长和统计
-        columns = ["ID", "BDAT", "RC", "LACT", "TBRD", "CDAT", "FDAT", "DDAT",
-                   "LSBD", "ABDAT", "DUE", "DIM", "DCC", "DSLB"]
+        columns = [
+            "ID", "BDAT", "RC", "LACT", "TBRD", "CDAT", "FDAT", "DDAT", "LSBD",
+            "ABDAT", "DUE", "DIM", "DCC", "DSLB"
+        ]
         cowsList = []
         for cow in Summary.CowSet:
             cow.grow(passDays, today, isMonthEnd)  # 生长
@@ -2467,10 +2495,11 @@ def forecast2(herds, start, end, parameter_suffix,  AGEFB, WWTP, HDR,
                     if cow.fdat > Args.DATE0 and cow.ddat <= Args.DATE0:
                         Summary.AuditMilkNum += 1
                 if not flag:
-                    cowsList.append([cow.id, cow.bdat, cow.rc, cow.lact,
-                                     cow.tbrd, cow.cdat, cow.fdat, cow.ddat,
-                                     cow.lsbd, cow.abdat, cow.due, cow.dim,
-                                     cow.dcc, cow.dslb])
+                    cowsList.append([
+                        cow.id, cow.bdat, cow.rc, cow.lact, cow.tbrd, cow.cdat,
+                        cow.fdat, cow.ddat, cow.lsbd, cow.abdat, cow.due,
+                        cow.dim, cow.dcc, cow.dslb
+                    ])
         cowsFile = pd.DataFrame(columns=columns, data=cowsList)
         # 处理淘汰牛
         for cow in list(Summary.CowSet):
@@ -2493,7 +2522,8 @@ def forecast2(herds, start, end, parameter_suffix,  AGEFB, WWTP, HDR,
             opening - Summary.CULL_NUM - Summary.CowNum + Summary.CalfNum,
             Summary.AuditNum, Summary.YongNum, Summary.YongPregNum,
             Summary.AuditPregNum, Summary.AuditMilkNum, Summary.SEMEN_NUM_C,
-            Summary.SEMEN_NUM_S, Summary.SEMEN_NUM_B]
+            Summary.SEMEN_NUM_S, Summary.SEMEN_NUM_B
+        ]
 
         Summary.clear()
 

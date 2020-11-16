@@ -16,7 +16,8 @@ import pinyin
 from creatDB import loaddb, writedb
 from icon import img
 from log import logger, logging
-from matching import DB, YMD, Farm
+from matching import Farm
+from parameters import DB, YMD, DIR
 from tools import extract_log, merge_body, merge_files, mger_pos
 
 version = '2.3-20200805'
@@ -112,7 +113,6 @@ class APP(object):
 
     # 设置1：创建目录
     def mkdir(self):
-        global DIR
         path1 = os.path.join(DIR, 'Match_files')
         path2 = os.path.join(DIR, 'Postions')
         path3 = os.path.join(DIR, '待做体型')
@@ -122,12 +122,15 @@ class APP(object):
         path7 = os.path.join(DIR, 'body_by_month', 'old')
         path8 = os.path.join(DIR, 'AltaGPS_Data')
         path9 = os.path.join(DIR, 'AltaGPS_Reports')
+        path10 = os.path.join(DIR, '主要信息')
+        path11 = os.path.join(DIR, 'log')
         path_list = [
-            path1, path2, path3, path4, path5, path6, path7, path8, path9
+            path1, path2, path3, path4, path5, path6, path7, path8, path9,
+            path10, path11
         ]
         paths = ""
         paths_is = ""
-        for i in range(0, 9):
+        for i in range(0, len(path_list)):
             isExists = os.path.exists(path_list[i])
             if not isExists:
                 os.makedirs(path_list[i])
