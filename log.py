@@ -25,5 +25,3 @@ fh.setLevel(logging.DEBUG)  # 日志级别: 日志中的级别
 logger.addHandler(fh)
 logger.debug("TEST for logging")
 
-if 1:
-    print("1".format("df{}".format("{}".format())))
