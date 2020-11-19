@@ -4,7 +4,6 @@ import math
 import os
 import pickle
 import platform
-import sys
 import time
 import traceback
 from fractions import Fraction
@@ -281,13 +280,19 @@ class Farm(object):
         return herds1
 
     def split_file(self, id='牛号'):
+        logger.info("\n有配种组文件")
         cats = self.herds['配种组'].unique()
+        if len(cats) == 1:
+            logger.info("只有一个配种组，不分割")
+            return
+        logger.info("有多个配种组（{}），开始分割".format(len(cats)))
         cats.sort()
+        logger.info("全群明细中的配种组有:{},{}".format(cats, type(cats)))
         with open(self.pickleFile, 'rb') as db:
             herds = pickle.load(db)
         try:
             herds[id] = herds[id].astype(int)
-            logger.info("转换为int")
+            logger.info("将牛号转换为int成功")
         except Exception:
             herds[id] = herds[id].astype(str)
         data = pd.merge(herds,
@@ -295,13 +300,14 @@ class Farm(object):
                         how='left',
                         left_on=id,
                         right_on='牛号')
-        logger.info("cats:{}".format(cats))
+
         for cat in cats:
             name = self.cows_file.replace('.', '_{}.'.format(cat))
             toFile = os.path.join(DIR, 'Match_files', name)
             df = data[data['配种组'] == cat]
             df.to_excel(toFile, index=False, encoding='utf8')
-            logger.info("保存完成：{}".format(toFile))
+            logger.info("分割的文件保存完成：{}".format(toFile))
+            logger.info("牛头数是：{}".format(len(df)))
         logger.info("处理完成")
 
     def creat_match_file(self, dc_com_file, **kwargs):
