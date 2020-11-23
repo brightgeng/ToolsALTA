@@ -665,7 +665,12 @@ class Farm(object):
         except ValueError:
             logger.error('错误:\n' + '运行出错。可能的原因是牛群列表中的耳号列有空值或含有字母\n{}'.format(
                 traceback.format_exc()))
-            return
+            beef_list = beef_list.append([{"牛号": 'z'}], ignore_index=True)
+            try:
+                self.mf = pd.merge(self.mf, beef_list, how='left')  # 连接肉牛
+            except ValueError:
+                logger.info("出现未知错误！")
+                return
         if kwargs['com_list_file']:  # 性控用常规
             com_list = pd.DataFrame(
                 pd.read_csv(
@@ -697,9 +702,27 @@ class Farm(object):
             logger.info("3.10 修改【性控】用【常规】的冻精")
 
         # logger.debug(common_sirs)
-        self.mf = pd.merge(self.mf, common_sirs, how='left')
+        try:
+            self.mf = pd.merge(self.mf, common_sirs, how='left')
+        except ValueError:
+            logger.info("牛群明细中耳号含有英文")
+            common_sirs = common_sirs.append([{"牛号": 'z'}], ignore_index=True)
+            try:
+                self.mf = pd.merge(self.mf, common_sirs, how='left')
+            except ValueError:
+                logger.info("出现未知错误！")
+                return
         logger.info('3.11 链接【常规选配方案】')
-        self.mf = pd.merge(self.mf, sex_sirs, how='left')
+        try:
+            self.mf = pd.merge(self.mf, sex_sirs, how='left')
+        except ValueError:
+            logger.info("牛群明细中耳号含有英文")
+            sex_sirs = sex_sirs.append([{"牛号": 'z'}], ignore_index=True)
+            try:
+                self.mf = pd.merge(self.mf, sex_sirs, how='left')
+            except ValueError:
+                logger.info("出现未知错误！")
+                return
         logger.info('3.12 链接【性控选配方案】')
 
         if self.use_beef and kwargs['beef_list_file']:  # 填充肉牛冻精号

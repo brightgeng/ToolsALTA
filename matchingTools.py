@@ -20,9 +20,10 @@ from matching import Farm
 from parameters import DB, YMD, DIR
 from tools import extract_log, merge_body, merge_files, mger_pos
 
-version = '2.3-20200805'
+version = '2.4-20201123'
 CHANGLOG = """
 version    Date     comments                        todo
+2.4        11/23/20 修改明细中牛号有字母的bug
 2.3        8/5/20   流产率设置分为了青年和成母牛
 2.2        7/1/20   修改推算怀孕率的bug
 2.1        4/13/20  预测的第2方法                   第3方法(机器学习)
