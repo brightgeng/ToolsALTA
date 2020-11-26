@@ -807,9 +807,10 @@ class Farm(object):
             logger.info(self.sirs_num)
 
         # 保存到excel
+        file_end = self.name2.replace("csv", "xlsx")
         logger.info('3.20：正在保存选配文件...')
         result_file = os.path.join(DIR, '选配文件',
-                                   self.name + '_选配文件_' + YMD + '.xlsx')
+                                   self.name + '_选配文件_' + YMD + file_end)
         self.mf.to_excel(result_file, index=True, encoding='utf8')
         rate = self.mf['用肉牛'].sum() / self.mf['用肉牛'].count()
         logger.info('3.21 肉牛比例为：{}'.format(str('%.2f%%' % (rate * 100))))
@@ -821,7 +822,7 @@ class Farm(object):
             herdsFile = os.path.join(DIR, 'Match_files', self.cows_file)
             logger.info('----1全群明细复制到 "选配文件" 文件夹下')
             matchFile = os.path.join(DIR, '选配文件',
-                                     YMD + '_选配方案_' + self.name + '.xlsx')
+                                     YMD + '_选配方案_' + self.name + file_end)
             copyfile(herdsFile, matchFile)
             if self.sirs_num == 6:
                 self.case = self.mf[['普精1', '普精2', '普精3', '性控1', '性控2',
@@ -842,7 +843,7 @@ class Farm(object):
         else:
             logger.info("3.23 开始生成CSV选配文件")
             matchFile = os.path.join(DIR, '选配文件',
-                                     YMD + '_选配方案_' + self.name + '.csv')
+                                     YMD + '_选配方案_' + self.name + self.name2)
             self.mf[['牛号', '1选', '2选', '3选']].to_csv(matchFile,
                                                      index=False,
                                                      header=False,
