@@ -20,9 +20,10 @@ from matching import Farm
 from parameters import DB, YMD, DIR
 from tools import extract_log, merge_body, merge_files, mger_pos
 
-version = '2.4-20201123'
+version = '2.5-20201126'
 CHANGLOG = """
 version    Date     comments                        todo
+2.5        11/26/20 选配文件后缀与牛群明细的相同
 2.4        11/23/20 修改明细中牛号有字母的bug
 2.3        8/5/20   流产率设置分为了青年和成母牛
 2.2        7/1/20   修改推算怀孕率的bug
